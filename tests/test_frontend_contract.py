@@ -56,6 +56,9 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("generation !== state.generation", self.source)
         self.assertIn("isCurrentTerminal(state, generation, terminalId)", self.source)
         self.assertIn('state.terminalId = ""', self.source)
+        dispose = self.source.split("async function disposeTerminal", 1)[1]
+        dispose = dispose.split("function terminalSurface", 1)[0]
+        self.assertLess(dispose.index("cancelAnimationFrame(state.inputFrame)"), dispose.index("state.inputFrame = 0"))
 
     def test_manifest_versions_and_frontend_methods_match(self) -> None:
         manifest = json.loads((PLUGIN_ROOT / "plugin.json").read_text(encoding="utf-8"))

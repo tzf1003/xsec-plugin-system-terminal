@@ -262,6 +262,7 @@ async function disposeTerminal(state) {
   clearPoll(state);
   clearTimeout(state.resizeTimer);
   cancelAnimationFrame(state.inputFrame);
+  state.inputFrame = 0;
   state.observer?.disconnect();
   theme?.dispose();
   state.theme = undefined;
