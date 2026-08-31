@@ -7,7 +7,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FRONTEND = ROOT / "com.xsec.desktop" / "frontend" / "index.js"
+PLUGIN_ROOT = ROOT / "plugins" / "com.xsec.system-terminal"
+FRONTEND = PLUGIN_ROOT / "com.xsec.desktop" / "frontend" / "index.js"
 
 
 class FrontendContractTests(unittest.TestCase):
@@ -50,8 +51,8 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('state.terminalId = ""', self.source)
 
     def test_manifest_versions_and_frontend_methods_match(self) -> None:
-        manifest = json.loads((ROOT / "plugin.json").read_text(encoding="utf-8"))
-        codex = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        manifest = json.loads((PLUGIN_ROOT / "plugin.json").read_text(encoding="utf-8"))
+        codex = json.loads((PLUGIN_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["version"], codex["version"])
         methods = manifest["extensions"]["com.xsec.desktop"]["frontendApi"]["methods"]
         requested = set(re.findall(r'host\.request\("([^"]+)"', self.source))
