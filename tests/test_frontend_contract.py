@@ -36,6 +36,13 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('host.request("xsec.terminal.settings.get"', options)
         self.assertIn("profileId: settings?.effectiveProfileId", options)
         self.assertNotIn(".catch", options)
+        self.assertGreater(
+            options.rfind("terminalSize(state)"),
+            options.index('host.request("xsec.terminal.settings.get"'),
+        )
+        opened = self.source.split("state.terminalId = handle.terminal_id", 1)[1]
+        opened = opened.split("function scheduleWrite", 1)[0]
+        self.assertIn("resizeTerminal(state)", opened)
 
     def test_polling_stops_on_read_failure_and_throttles_idle_reads(self) -> None:
         poll = self.source.split("async function poll", 1)[1]
