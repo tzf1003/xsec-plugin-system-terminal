@@ -1,22 +1,14 @@
 const WINDOWS_PROFILE_IDS = new Set(["cmd", "windows-powershell", "powershell-7"]);
-const POLL_INTERVAL_MS = 100;
-const RESIZE_DELAY_MS = 100;
-const MIN_COLUMNS = 20;
-const MIN_ROWS = 2;
-const CELL_WIDTH = 8;
-const CELL_HEIGHT = 16;
-
+const ACTIVE_POLL_INTERVAL_MS = 100, IDLE_POLL_INTERVAL_MS = 500, RESIZE_DELAY_MS = 100;
+const MIN_COLUMNS = 20, MIN_ROWS = 2, CELL_WIDTH = 8, CELL_HEIGHT = 16;
 const e = (tag, className, text) => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
+  const node = document.createElement(tag); if (className) node.className = className;
+  if (text !== undefined) node.textContent = text; return node;
 };
 const errorText = (error) => error instanceof Error ? error.message : String(error);
 const clean = (value) => String(value || "")
   .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
   .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
-
 const css = `
 :root{color-scheme:dark;--bg:#111;--surface:#17191d;--surface-hover:#202329;--text:#fcfcfc;--muted:#919191;--border:#303030;--accent:#76a5ff;--danger:#ff8b88;--danger-bg:#2b171b;--danger-border:#60343c}
 :root[data-theme="light"]{color-scheme:light;--bg:#fff;--surface:#f6f7f9;--surface-hover:#eceff3;--text:#17191c;--muted:#606773;--border:#d7dbe1;--accent:#3977e8;--danger:#b42318;--danger-bg:#fdeaea;--danger-border:#f4b8b2}
@@ -27,177 +19,168 @@ const css = `
 .settings h1{margin:0 0 6px;font-size:20px;line-height:1.3}.settings p{margin:0;color:var(--muted)}.settings label{display:grid;gap:7px;margin:20px 0 12px;color:var(--text);font-weight:600}.settings select,.settings button{min-height:36px;padding:7px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text)}
 .settings select:focus-visible,.settings button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.settings button{cursor:pointer;font-weight:600}.settings button:hover{background:var(--surface-hover)}.settings button:disabled{cursor:default;opacity:.55}.settings .effective{margin-top:10px}.settings .actions{display:flex;gap:8px;margin-top:16px}.settings .primary{border-color:var(--accent);background:var(--accent);color:#fff}.settings .notice{min-height:21px;margin-top:12px}.settings .notice.error{color:var(--danger)}
 `;
-
 function followHostTheme(host) {
   const apply = (theme) => {
-    const bridged = getComputedStyle(document.documentElement)
-      .getPropertyValue("--xsec-color-mode").trim();
+    const bridged = getComputedStyle(document.documentElement).getPropertyValue("--xsec-color-mode").trim();
     const mode = theme?.["color-mode"] || bridged;
     document.documentElement.dataset.theme = mode === "light" ? "light" : "dark";
   };
-  apply();
-  return host.onTheme?.(apply);
+  apply(); return host.onTheme?.(apply);
 }
-
-function replaceDocument(root) {
-  root.replaceChildren();
-  root.append(e("style", "", css));
-}
-
+function replaceDocument(root) { root.replaceChildren(); root.append(e("style", "", css)); }
 function settingStatus(state, message, error = false) {
-  state.controls.notice.textContent = message;
-  state.controls.notice.className = `notice${error ? " error" : ""}`;
+  state.controls.notice.textContent = message; state.controls.notice.className = `notice${error ? " error" : ""}`;
 }
-
 function renderSettingsView(state, view) {
   const profiles = Array.isArray(view?.profiles) ? view.profiles : [];
   const isWindows = view?.platform === "windows";
-  state.controls.form.hidden = !isWindows;
-  state.controls.systemDefault.hidden = isWindows;
+  state.controls.form.hidden = !isWindows; state.controls.systemDefault.hidden = isWindows;
   if (!isWindows) {
-    state.controls.systemDefault.textContent = "当前系统的新建终端使用系统默认 Shell。";
-    return;
+    state.controls.systemDefault.textContent = "当前系统的新建终端使用系统默认 Shell。"; return;
   }
   const available = profiles.filter((item) => WINDOWS_PROFILE_IDS.has(item.id));
   if (!available.length) throw new Error("当前 Windows 系统没有可用的终端");
   state.controls.profile.replaceChildren();
-  const automatic = e("option", "", "跟随系统默认终端");
-  automatic.value = "";
+  const automatic = e("option", "", "跟随系统默认终端"); automatic.value = "";
   state.controls.profile.append(automatic);
   for (const item of available) {
     const suffix = item.is_default ? "（系统默认）" : "";
-    const option = e("option", "", `${item.label || item.id}${suffix}`);
-    option.value = item.id;
+    const option = e("option", "", `${item.label || item.id}${suffix}`); option.value = item.id;
     state.controls.profile.append(option);
   }
   state.controls.profile.value = view?.configuredProfileId || "";
   const effective = available.find((item) => item.id === view?.effectiveProfileId);
-  state.controls.effective.textContent = effective ? `新建终端将使用：${effective.label}` : "";
+  state.controls.effective.textContent = effective ? `新建终端将使用：${effective.label || effective.id}` : "";
 }
-
-async function loadSettings(state) {
-  state.ready = false;
-  state.controls.save.disabled = true;
-  state.controls.retry.hidden = true;
+async function loadSettings(state, generation = state.generation) {
+  state.ready = false; state.controls.save.disabled = true;
   settingStatus(state, "正在读取终端设置…");
   try {
     const view = await state.host.request("xsec.terminal.settings.get", {});
+    if (generation !== state.generation) return;
     renderSettingsView(state, view);
-    state.ready = true;
-    state.controls.save.disabled = false;
+    state.ready = true; state.controls.save.disabled = false;
     settingStatus(state, "");
   } catch (error) {
-    settingStatus(state, `读取终端设置失败：${errorText(error)}`, true);
-    state.controls.retry.hidden = false;
+    if (generation === state.generation) settingStatus(state, `读取终端设置失败：${errorText(error)}`, true);
   }
 }
-
 async function saveSettings(state) {
   if (!state.ready) return;
+  const generation = state.generation;
   state.controls.save.disabled = true;
   try {
-    await state.host.request("xsec.terminal.settings.set", {
-      profileId: state.controls.profile.value || null,
-    });
-    await loadSettings(state);
-    if (state.ready) settingStatus(state, "默认终端已保存，仅影响之后新建的终端。");
+    await state.host.request("xsec.terminal.settings.set", { profileId: state.controls.profile.value || null });
+    if (generation !== state.generation) return;
+    await loadSettings(state, generation);
+    if (generation === state.generation && state.ready) {
+      settingStatus(state, "默认终端已保存，仅影响之后新建的终端。");
+    }
   } catch (error) {
-    settingStatus(state, `保存终端设置失败：${errorText(error)}`, true);
-    state.controls.save.disabled = false;
+    if (generation === state.generation) {
+      settingStatus(state, `保存终端设置失败：${errorText(error)}`, true);
+      state.controls.save.disabled = false;
+    }
   }
 }
-
 function buildSettings(state) {
   replaceDocument(state.root);
-  const page = e("main", "settings");
-  const card = e("section", "settings-card");
-  const form = e("div");
-  const label = e("label", "", "Windows 默认终端");
-  const profile = e("select");
-  const effective = e("p", "effective");
-  const systemDefault = e("p");
-  const actions = e("div", "actions");
-  const save = e("button", "primary", "保存");
-  const retry = e("button", "", "重新读取设置");
-  const notice = e("p", "notice");
-  form.hidden = true;
-  systemDefault.hidden = true;
+  const page = e("main", "settings"), card = e("section", "settings-card"), form = e("div");
+  const label = e("label", "", "Windows 默认终端"), profile = e("select");
+  const effective = e("p", "effective"), systemDefault = e("p"), actions = e("div", "actions");
+  const save = e("button", "primary", "保存"), notice = e("p", "notice");
+  form.hidden = true; systemDefault.hidden = true;
   save.disabled = true;
-  retry.hidden = true;
   save.onclick = () => void saveSettings(state);
-  retry.onclick = () => void loadSettings(state);
   label.append(profile);
-  actions.append(save, retry);
+  actions.append(save);
   form.append(label, effective, actions);
   card.append(e("h1", "", "系统终端"), e("p", "", "设置之后新建终端使用的 Shell。"), form, systemDefault, notice);
   page.append(card);
   state.root.append(page);
-  state.controls = { form, profile, effective, systemDefault, save, retry, notice };
+  state.controls = { form, profile, effective, systemDefault, save, notice };
   void loadSettings(state);
 }
-
 function terminalSettings(host) {
-  const state = { host, root: undefined, controls: {}, ready: false };
-  const theme = followHostTheme(host);
+  const state = { host, root: undefined, controls: {}, ready: false, generation: 0, theme: undefined };
   return {
-    mount(root) { state.root = root; buildSettings(state); },
+    mount(root) {
+      state.root = root; state.generation += 1;
+      state.theme = followHostTheme(host); buildSettings(state);
+    },
     update() {},
-    dispose() { theme?.dispose(); },
+    dispose() { state.generation += 1; state.theme?.dispose(); state.theme = undefined; },
   };
 }
-
 function clearPoll(state) {
-  if (state.pollTimer) clearTimeout(state.pollTimer);
-  state.pollTimer = 0;
+  if (state.pollTimer) clearTimeout(state.pollTimer); state.pollTimer = 0;
 }
-
-function report(state, message) {
-  state.controls.status.textContent = message;
+function report(state, message) { state.controls.status.textContent = message; }
+function failTerminal(state, message) {
+  state.failed = true; clearPoll(state); report(state, message);
 }
-
-function schedulePoll(state) {
+function isCurrentTerminal(state, generation, terminalId) {
+  return generation === state.generation && terminalId === state.terminalId;
+}
+function schedulePoll(state, delay = ACTIVE_POLL_INTERVAL_MS) {
   clearPoll(state);
-  if (state.disposed || !state.terminalId || document.hidden) return;
-  state.pollTimer = setTimeout(() => void poll(state), POLL_INTERVAL_MS);
+  if (state.disposed || state.failed || !state.terminalId || document.hidden) return;
+  state.pollTimer = setTimeout(() => void poll(state), delay);
 }
-
 async function poll(state) {
-  if (state.disposed || !state.terminalId || state.reading || document.hidden) return;
+  if (state.disposed || state.failed || !state.terminalId || state.reading || document.hidden) return;
+  const generation = state.generation, terminalId = state.terminalId;
+  let nextDelay = 0;
   state.reading = true;
   try {
-    const data = await state.host.request("xsec.terminal.read", { terminalId: state.terminalId });
+    const data = await state.host.request("xsec.terminal.read", { terminalId });
+    if (!isCurrentTerminal(state, generation, terminalId)) return;
     if (data?.data) {
-      state.controls.screen.textContent += clean(data.data);
-      state.controls.screen.scrollTop = state.controls.screen.scrollHeight;
+      state.controls.screen.textContent += clean(data.data); state.controls.screen.scrollTop = state.controls.screen.scrollHeight;
     }
-    schedulePoll(state);
+    nextDelay = data?.data ? ACTIVE_POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS;
   } catch (error) {
-    report(state, `读取终端失败：${errorText(error)}`);
+    if (isCurrentTerminal(state, generation, terminalId)) {
+      failTerminal(state, `读取终端失败：${errorText(error)}`);
+    }
   } finally {
-    state.reading = false;
+    if (isCurrentTerminal(state, generation, terminalId)) {
+      state.reading = false;
+      if (nextDelay) schedulePoll(state, nextDelay);
+    }
   }
 }
-
 function terminalSize(state) {
   return {
     cols: Math.max(MIN_COLUMNS, Math.floor(state.controls.screen.clientWidth / CELL_WIDTH)),
     rows: Math.max(MIN_ROWS, Math.floor(state.controls.screen.clientHeight / CELL_HEIGHT)),
   };
 }
-
-async function openTerminal(state) {
+async function terminalOpenOptions(state) {
+  const size = terminalSize(state);
+  if (!/Windows/i.test(navigator.userAgent)) return size;
+  const settings = await state.host.request("xsec.terminal.settings.get", {});
+  return { ...size, profileId: settings?.effectiveProfileId || undefined };
+}
+async function openTerminal(state, generation) {
   state.controls.status.textContent = "";
   state.controls.screen.textContent = "";
   try {
-    const handle = await state.host.request("xsec.terminal.open", terminalSize(state));
+    const options = await terminalOpenOptions(state);
+    if (generation !== state.generation) return;
+    const handle = await state.host.request("xsec.terminal.open", options);
+    if (generation !== state.generation) {
+      await state.host.request("xsec.terminal.close", { terminalId: handle.terminal_id });
+      return;
+    }
     state.terminalId = handle.terminal_id;
     state.controls.screen.focus();
-    schedulePoll(state);
+    schedulePoll(state, 0);
   } catch (error) {
-    report(state, `启动终端失败：${errorText(error)}`);
+    if (generation !== state.generation) return;
+    failTerminal(state, `启动终端失败：${errorText(error)}`);
   }
 }
-
 function scheduleWrite(state) {
   if (state.inputFrame || state.writing || !state.inputBuffer) return;
   state.inputFrame = requestAnimationFrame(() => {
@@ -205,23 +188,26 @@ function scheduleWrite(state) {
     void flushWrite(state);
   });
 }
-
 async function flushWrite(state) {
-  if (state.writing || !state.inputBuffer || !state.terminalId) return;
-  const data = state.inputBuffer;
+  if (state.failed || state.writing || !state.inputBuffer || !state.terminalId) return;
+  const generation = state.generation, terminalId = state.terminalId, data = state.inputBuffer;
   state.inputBuffer = "";
   state.writing = true;
   try {
-    await state.host.request("xsec.terminal.write", { terminalId: state.terminalId, data });
+    await state.host.request("xsec.terminal.write", { terminalId, data });
   } catch (error) {
-    report(state, `写入终端失败：${errorText(error)}`);
+    if (isCurrentTerminal(state, generation, terminalId)) {
+      failTerminal(state, `写入终端失败：${errorText(error)}`);
+    }
   } finally {
-    state.writing = false;
-    scheduleWrite(state);
+    if (isCurrentTerminal(state, generation, terminalId)) {
+      state.writing = false;
+      scheduleWrite(state);
+    }
   }
 }
-
 function keyInput(state, event) {
+  if (state.failed || !state.terminalId) return;
   if (event.ctrlKey && event.key.toLowerCase() === "c") {
     event.preventDefault();
     state.inputBuffer += "\x03";
@@ -235,20 +221,21 @@ function keyInput(state, event) {
   state.inputBuffer += data;
   scheduleWrite(state);
 }
-
 function resizeTerminal(state) {
-  if (!state.terminalId) return;
+  if (state.failed || !state.terminalId) return;
+  const generation = state.generation, terminalId = state.terminalId;
   void state.host.request("xsec.terminal.resize", {
-    terminalId: state.terminalId,
+    terminalId,
     ...terminalSize(state),
-  }).catch((error) => report(state, `调整终端大小失败：${errorText(error)}`));
+  }).catch((error) => {
+    if (isCurrentTerminal(state, generation, terminalId)) {
+      failTerminal(state, `调整终端大小失败：${errorText(error)}`);
+    }
+  });
 }
-
 function buildTerminal(state) {
   replaceDocument(state.root);
-  const app = e("main", "app");
-  const status = e("div", "status");
-  const screen = e("pre", "screen", "");
+  const app = e("main", "app"), status = e("div", "status"), screen = e("pre", "screen", "");
   screen.tabIndex = 0;
   screen.setAttribute("role", "application");
   screen.setAttribute("aria-label", "系统终端");
@@ -263,35 +250,42 @@ function buildTerminal(state) {
   state.observer.observe(screen);
   state.visibility = () => document.hidden ? clearPoll(state) : schedulePoll(state);
   document.addEventListener("visibilitychange", state.visibility);
-  void openTerminal(state);
+  const generation = state.generation;
+  state.opening = openTerminal(state, generation);
+  void state.opening.catch(() => {});
 }
-
 async function disposeTerminal(state) {
-  state.disposed = true;
+  const terminalId = state.terminalId, opening = state.opening, theme = state.theme;
+  state.generation += 1;
+  state.disposed = true; state.failed = false; state.terminalId = "";
+  state.reading = false; state.writing = false; state.inputBuffer = "";
   clearPoll(state);
   clearTimeout(state.resizeTimer);
   cancelAnimationFrame(state.inputFrame);
   state.observer?.disconnect();
-  state.theme?.dispose();
+  theme?.dispose();
+  state.theme = undefined;
   document.removeEventListener("visibilitychange", state.visibility);
-  if (state.terminalId) await state.host.request("xsec.terminal.close", { terminalId: state.terminalId });
-  state.terminalId = "";
+  if (opening) await opening;
+  if (terminalId) await state.host.request("xsec.terminal.close", { terminalId });
 }
-
 function terminalSurface(host) {
   const state = {
-    host, root: undefined, controls: {}, terminalId: "", disposed: false,
+    host, root: undefined, controls: {}, terminalId: "", disposed: false, failed: false,
     reading: false, writing: false, inputBuffer: "", pollTimer: 0,
     resizeTimer: 0, inputFrame: 0, observer: undefined, visibility: undefined,
-    theme: followHostTheme(host),
+    theme: undefined, opening: undefined, generation: 0,
   };
   return {
-    mount(root) { state.root = root; state.disposed = false; buildTerminal(state); },
+    mount(root) {
+      state.root = root; state.generation += 1;
+      state.disposed = false; state.failed = false;
+      state.theme = followHostTheme(host); buildTerminal(state);
+    },
     update() {},
     dispose() { return disposeTerminal(state); },
   };
 }
-
 export function activate(host) {
   return host.context?.kind === "settings-page" ? terminalSettings(host) : terminalSurface(host);
 }
