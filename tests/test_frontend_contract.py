@@ -51,6 +51,13 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("failTerminal(state, `读取终端失败：", poll)
         self.assertNotIn("schedulePoll(state", poll.split("catch (error)", 1)[1].split("finally", 1)[0])
 
+    def test_superseded_resize_failures_do_not_stop_the_terminal(self) -> None:
+        resize = self.source.split("function resizeTerminal", 1)[1]
+        resize = resize.split("function buildTerminal", 1)[0]
+        self.assertIn("const resizeGeneration = ++state.resizeGeneration", resize)
+        self.assertIn("resizeGeneration === state.resizeGeneration", resize)
+        self.assertIn("resizeGeneration: 0", self.source)
+
     def test_remount_owns_theme_and_async_terminal_results(self) -> None:
         self.assertGreaterEqual(self.source.count("state.theme = followHostTheme(host)"), 2)
         self.assertIn("generation !== state.generation", self.source)

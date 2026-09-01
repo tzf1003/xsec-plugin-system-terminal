@@ -224,11 +224,12 @@ function keyInput(state, event) {
 function resizeTerminal(state) {
   if (state.failed || !state.terminalId) return;
   const generation = state.generation, terminalId = state.terminalId;
+  const resizeGeneration = ++state.resizeGeneration;
   void state.host.request("xsec.terminal.resize", {
     terminalId,
     ...terminalSize(state),
   }).catch((error) => {
-    if (isCurrentTerminal(state, generation, terminalId)) {
+    if (resizeGeneration === state.resizeGeneration && isCurrentTerminal(state, generation, terminalId)) {
       failTerminal(state, `调整终端大小失败：${errorText(error)}`);
     }
   });
@@ -274,7 +275,7 @@ function terminalSurface(host) {
   const state = {
     host, root: undefined, controls: {}, terminalId: "", disposed: false, failed: false,
     reading: false, writing: false, inputBuffer: "", pollTimer: 0,
-    resizeTimer: 0, inputFrame: 0, observer: undefined, visibility: undefined,
+    resizeTimer: 0, resizeGeneration: 0, inputFrame: 0, observer: undefined, visibility: undefined,
     theme: undefined, opening: undefined, generation: 0,
   };
   return {
