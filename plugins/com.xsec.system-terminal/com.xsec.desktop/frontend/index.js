@@ -157,18 +157,12 @@ async function poll(host, state) {
   }
 }
 function terminalSize(state) { const screen = state.controls.screen, style = getComputedStyle(screen); return { cols: Math.max(MIN_COLUMNS, Math.floor((screen.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)) / CELL_WIDTH)), rows: Math.max(MIN_ROWS, Math.floor((screen.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) / CELL_HEIGHT)) }; }
-async function terminalOpenOptions(host, state) {
-  const settings = await host.request("xsec.terminal.settings.get", {});
-  if (settings?.platform !== "windows") return terminalSize(state);
-  return { ...terminalSize(state), profileId: settings?.effectiveProfileId || undefined };
-}
 async function openTerminal(host, state, generation) {
   clearReport(state);
   state.controls.screenText.data = "";
   try {
-    const options = await terminalOpenOptions(host, state);
     if (generation !== state.generation) return;
-    const handle = await host.request("xsec.terminal.open", options);
+    const handle = await host.request("xsec.terminal.open", terminalSize(state));
     if (generation !== state.generation) {
       await host.request("xsec.terminal.close", { terminalId: handle.terminal_id });
       return;

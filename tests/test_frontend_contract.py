@@ -32,25 +32,20 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("effective.label || effective.id", self.source)
         self.assertIn("新建终端使用当前帐户的登录 Shell。", self.source)
 
-    def test_windows_profile_is_loaded_for_each_new_terminal(self) -> None:
-        options = self.source.split("async function terminalOpenOptions", 1)[1]
-        options = options.split("async function openTerminal", 1)[0]
-        self.assertIn('host.request("xsec.terminal.settings.get"', options)
-        self.assertIn('settings?.platform !== "windows"', options)
-        self.assertIn("profileId: settings?.effectiveProfileId", options)
-        self.assertNotIn("navigator.userAgent", options)
-        self.assertNotIn(".catch", options)
-        self.assertGreater(
-            options.rfind("terminalSize(state)"),
-            options.index('host.request("xsec.terminal.settings.get"'),
-        )
+    def test_terminal_open_delegates_the_saved_profile_to_the_host(self) -> None:
+        opened = self.source.split("async function openTerminal", 1)[1]
+        opened = opened.split("function scheduleWrite", 1)[0]
+        self.assertIn('host.request("xsec.terminal.open", terminalSize(state))', opened)
+        self.assertNotIn('host.request("xsec.terminal.settings.get"', opened)
+        self.assertNotIn("profileId", opened)
+        self.assertNotIn("navigator.userAgent", opened)
         opened = self.source.split("state.terminalId = handle.terminal_id", 1)[1]
         opened = opened.split("function scheduleWrite", 1)[0]
         self.assertIn("resizeTerminal(host, state)", opened)
 
     def test_terminal_size_uses_the_visible_content_box(self) -> None:
         size = self.source.split("function terminalSize", 1)[1]
-        size = size.split("async function terminalOpenOptions", 1)[0]
+        size = size.split("async function openTerminal", 1)[0]
         self.assertIn("getComputedStyle(screen)", size)
         for edge in ("paddingLeft", "paddingRight", "paddingTop", "paddingBottom"):
             self.assertIn(edge, size)
