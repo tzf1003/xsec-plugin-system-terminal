@@ -42,7 +42,7 @@ class FrontendContractTests(unittest.TestCase):
         )
         opened = self.source.split("state.terminalId = handle.terminal_id", 1)[1]
         opened = opened.split("function scheduleWrite", 1)[0]
-        self.assertIn("resizeTerminal(state)", opened)
+        self.assertIn("resizeTerminal(host, state)", opened)
 
     def test_polling_stops_on_read_failure_and_throttles_idle_reads(self) -> None:
         poll = self.source.split("async function poll", 1)[1]
@@ -74,6 +74,11 @@ class FrontendContractTests(unittest.TestCase):
         methods = manifest["extensions"]["com.xsec.desktop"]["frontendApi"]["methods"]
         requested = set(re.findall(r'host\.request\("([^"]+)"', self.source))
         self.assertEqual(requested, set(methods))
+
+    def test_activation_returns_explicit_lifecycle_helpers(self) -> None:
+        activation = self.source.split("export function activate(host)", 1)[1]
+        self.assertIn('return terminalSettings(host)', activation)
+        self.assertIn('return terminalSurface(host)', activation)
 
     def test_source_respects_workspace_complexity_limits(self) -> None:
         lines = self.source.splitlines()
