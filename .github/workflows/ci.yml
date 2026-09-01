@@ -18,3 +18,7 @@ jobs:
         run: |
           test -f plugins/com.xsec.system-terminal/plugin.json
           test -f plugins/com.xsec.system-terminal/.codex-plugin/plugin.json
+      - name: Validate the terminal frontend contract
+        run: |
+          node --check plugins/com.xsec.system-terminal/com.xsec.desktop/frontend/index.js
+          python3 -m unittest discover -s tests -p 'test_*.py'
