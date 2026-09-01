@@ -87,15 +87,15 @@ function buildSettings(host, state) {
   replaceDocument(state.root);
   const page = e("main", "settings"), card = e("section", "settings-card"), form = e("div");
   const label = e("label", "", "Windows 默认终端"), profile = e("select");
-  const effective = e("p", "effective"), systemDefault = e("p"), actions = e("div", "actions");
+  const effective = e("p", "effective"), systemDefault = e("p"), actions = e("div", "actions"), retryActions = e("div", "actions");
   const save = e("button", "primary", "保存"), retry = e("button", "", "重试读取设置"), notice = e("p", "notice");
   form.hidden = true; systemDefault.hidden = true;
   save.disabled = true; retry.hidden = true;
   save.onclick = () => void saveSettings(host, state); retry.onclick = () => { console.info("system-terminal.settings.retry"); void loadSettings(host, state); };
   label.append(profile);
-  actions.append(retry, save);
+  actions.append(save); retryActions.append(retry);
   form.append(label, effective, actions);
-  card.append(e("h1", "", "系统终端"), e("p", "", "设置之后新建终端使用的 Shell。"), form, systemDefault, notice);
+  card.append(e("h1", "", "系统终端"), e("p", "", "设置之后新建终端使用的 Shell。"), form, systemDefault, retryActions, notice);
   page.append(card);
   state.root.append(page);
   state.controls = { form, profile, effective, systemDefault, save, retry, notice };

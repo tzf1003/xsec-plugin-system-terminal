@@ -54,6 +54,8 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('state.controls.retry.hidden = false', settings)
         self.assertIn('system-terminal.settings.retry', settings)
         self.assertIn('void loadSettings(host, state)', settings)
+        self.assertIn('actions.append(save); retryActions.append(retry)', settings)
+        self.assertIn('form, systemDefault, retryActions, notice', settings)
 
     def test_polling_stops_on_read_failure_and_throttles_idle_reads(self) -> None:
         poll = self.source.split("async function poll", 1)[1]
