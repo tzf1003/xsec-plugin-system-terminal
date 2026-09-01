@@ -117,12 +117,12 @@ function report(state, message) { state.controls.status.textContent = message; }
 async function failTerminal(host, state, message) {
   if (state.failed) return;
   state.failed = true; clearPoll(state);
-  const terminalId = state.terminalId; state.terminalId = "";
+  const generation = state.generation, terminalId = state.terminalId; state.terminalId = "";
   let closeError;
   try { if (terminalId) await host.request("xsec.terminal.close", { terminalId }); }
   catch (error) { closeError = error; }
+  if (generation !== state.generation) return;
   report(state, closeError ? `${message}；关闭终端失败：${errorText(closeError)}` : message);
-  if (closeError) throw closeError;
 }
 function appendScreen(state, value) {
   const text = state.controls.screenText; text.appendData(clean(value));
