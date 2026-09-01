@@ -82,6 +82,13 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("text.deleteData(0, overflow)", append)
         self.assertNotIn("textContent +=", self.source)
 
+    def test_terminal_failure_offers_an_explicit_reopen(self) -> None:
+        retry = self.source.split("function retryTerminal", 1)[1].split("async function disposeTerminal", 1)[0]
+        self.assertIn('"重新打开终端"', self.source)
+        self.assertIn("state.failed = false", retry)
+        self.assertIn("system-terminal.surface.retry", retry)
+        self.assertIn("openTerminal(host, state, state.generation)", retry)
+
     def test_superseded_resize_failures_do_not_stop_the_terminal(self) -> None:
         resize = self.source.split("function resizeTerminal", 1)[1]
         resize = resize.split("function buildTerminal", 1)[0]
