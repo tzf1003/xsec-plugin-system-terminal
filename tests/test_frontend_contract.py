@@ -58,6 +58,8 @@ class FrontendContractTests(unittest.TestCase):
         failure = self.source.split("async function failTerminal", 1)[1].split("function appendScreen", 1)[0]
         self.assertLess(failure.index('state.terminalId = ""'), failure.index('host.request("xsec.terminal.close"'))
         self.assertLess(failure.index('host.request("xsec.terminal.close"'), failure.index("report(state"))
+        self.assertEqual(failure.count('host.request("xsec.terminal.close"'), 1)
+        self.assertIn('state.reading = false; state.writing = false; state.inputBuffer = ""', failure)
         self.assertIn("catch (error) { closeError = error; }", failure)
         self.assertIn("generation !== state.generation", failure)
         self.assertNotIn("throw closeError", failure)

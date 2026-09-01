@@ -116,7 +116,7 @@ function clearPoll(state) { if (state.pollTimer) clearTimeout(state.pollTimer); 
 function report(state, message) { state.controls.status.textContent = message; }
 async function failTerminal(host, state, message) {
   if (state.failed) return;
-  state.failed = true; clearPoll(state);
+  state.failed = true; state.reading = false; state.writing = false; state.inputBuffer = ""; clearPoll(state);
   const generation = state.generation, terminalId = state.terminalId; state.terminalId = "";
   let closeError;
   try { if (terminalId) await host.request("xsec.terminal.close", { terminalId }); }
