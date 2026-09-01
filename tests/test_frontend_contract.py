@@ -23,11 +23,14 @@ class FrontendContractTests(unittest.TestCase):
             self.assertNotIn(text, surface)
 
     def test_settings_follow_host_theme_and_limit_windows_profiles(self) -> None:
+        """Keep themed Windows profiles and the Unix login-shell label aligned."""
+
         self.assertIn("host.onTheme?.(apply)", self.source)
         self.assertIn(':root[data-theme="light"]', self.source)
         self.assertIn('view?.platform === "windows"', self.source)
         self.assertIn('new Set(["cmd", "windows-powershell", "powershell-7"])', self.source)
         self.assertIn("effective.label || effective.id", self.source)
+        self.assertIn("新建终端使用当前帐户的登录 Shell。", self.source)
 
     def test_windows_profile_is_loaded_for_each_new_terminal(self) -> None:
         options = self.source.split("async function terminalOpenOptions", 1)[1]

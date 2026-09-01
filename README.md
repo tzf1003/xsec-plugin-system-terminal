@@ -16,4 +16,4 @@ Source repository: <https://github.com/tzf1003/xsec-plugin-system-terminal>
 - 终端工作区跟随 XSEC Desktop 的深色或浅色外观，并在启动、读取、写入或调整
   尺寸失败时显示实际错误。
 - Windows 设置页提供 CMD、Windows PowerShell 和 PowerShell 7 中当前可用的
-  Shell；macOS 与 Linux 使用系统默认 Shell。
+  Shell；macOS 与 Linux 使用当前帐户的登录 Shell。

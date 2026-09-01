@@ -36,7 +36,7 @@ function renderSettingsView(state, view) {
   const isWindows = view?.platform === "windows";
   state.controls.form.hidden = !isWindows; state.controls.systemDefault.hidden = isWindows;
   if (!isWindows) {
-    state.controls.systemDefault.textContent = "当前系统的新建终端使用系统默认 Shell。"; return;
+    state.controls.systemDefault.textContent = "新建终端使用当前帐户的登录 Shell。"; return;
   }
   const available = profiles.filter((item) => WINDOWS_PROFILE_IDS.has(item.id));
   if (!available.length) throw new Error("当前 Windows 系统没有可用的终端");
