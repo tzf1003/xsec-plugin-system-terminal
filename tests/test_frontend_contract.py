@@ -28,6 +28,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('view?.platform === "windows"', self.source)
         self.assertIn('new Set(["cmd", "windows-powershell", "powershell-7"])', self.source)
         self.assertIn("effective.label || effective.id", self.source)
+        self.assertIn("新建终端使用当前帐户的登录 Shell。", self.source)
 
     def test_windows_profile_is_loaded_for_each_new_terminal(self) -> None:
         options = self.source.split("async function terminalOpenOptions", 1)[1]
