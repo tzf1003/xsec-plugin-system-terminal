@@ -1,6 +1,6 @@
 const WINDOWS_PROFILE_IDS = new Set(["cmd", "windows-powershell", "powershell-7"]);
 const ACTIVE_POLL_INTERVAL_MS = 100, IDLE_POLL_INTERVAL_MS = 500, RESIZE_DELAY_MS = 100;
-const MIN_COLUMNS = 20, MIN_ROWS = 2, CELL_WIDTH = 8, CELL_HEIGHT = 16;
+const MIN_COLUMNS = 20, MIN_ROWS = 2, CELL_WIDTH = 8, CELL_HEIGHT = 16, MAX_SCROLLBACK_CHARACTERS = 200_000;
 const e = (tag, className, text) => {
   const node = document.createElement(tag); if (className) node.className = className;
   if (text !== undefined) node.textContent = text; return node;
@@ -105,23 +105,32 @@ function terminalSettings(host) {
   const state = { root: undefined, controls: {}, ready: false, generation: 0, theme: undefined };
   return {
     mount(root) {
-      state.root = root; state.generation += 1;
+      state.root = root; state.generation += 1; console.info("system-terminal.settings.mount");
       state.theme = followHostTheme(host); buildSettings(host, state);
     },
     update() {},
-    dispose() { state.generation += 1; state.theme?.dispose(); state.theme = undefined; },
+    dispose() { console.debug("system-terminal.settings.dispose"); state.generation += 1; state.theme?.dispose(); state.theme = undefined; },
   };
 }
-function clearPoll(state) {
-  if (state.pollTimer) clearTimeout(state.pollTimer); state.pollTimer = 0;
-}
+function clearPoll(state) { if (state.pollTimer) clearTimeout(state.pollTimer); state.pollTimer = 0; }
 function report(state, message) { state.controls.status.textContent = message; }
-function failTerminal(state, message) {
-  state.failed = true; clearPoll(state); report(state, message);
+async function failTerminal(host, state, message) {
+  if (state.failed) return;
+  state.failed = true; state.reading = false; state.writing = false; state.inputBuffer = ""; clearPoll(state);
+  const generation = state.generation, terminalId = state.terminalId; state.terminalId = "";
+  let closeError;
+  try { if (terminalId) await host.request("xsec.terminal.close", { terminalId }); }
+  catch (error) { closeError = error; }
+  if (generation !== state.generation) return;
+  report(state, closeError ? `${message}；关闭终端失败：${errorText(closeError)}` : message);
 }
-function isCurrentTerminal(state, generation, terminalId) {
-  return generation === state.generation && terminalId === state.terminalId;
+function appendScreen(state, value) {
+  const text = state.controls.screenText; text.appendData(clean(value));
+  const overflow = text.length - MAX_SCROLLBACK_CHARACTERS;
+  if (overflow > 0) text.deleteData(0, overflow);
+  state.controls.screen.scrollTop = state.controls.screen.scrollHeight;
 }
+function isCurrentTerminal(state, generation, terminalId) { return generation === state.generation && terminalId === state.terminalId; }
 function schedulePoll(host, state, delay = ACTIVE_POLL_INTERVAL_MS) {
   clearPoll(state);
   if (state.disposed || state.failed || !state.terminalId || document.hidden) return;
@@ -135,13 +144,11 @@ async function poll(host, state) {
   try {
     const data = await host.request("xsec.terminal.read", { terminalId });
     if (!isCurrentTerminal(state, generation, terminalId)) return;
-    if (data?.data) {
-      state.controls.screen.textContent += clean(data.data); state.controls.screen.scrollTop = state.controls.screen.scrollHeight;
-    }
+    if (data?.data) appendScreen(state, data.data);
     nextDelay = data?.data ? ACTIVE_POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS;
   } catch (error) {
     if (isCurrentTerminal(state, generation, terminalId)) {
-      failTerminal(state, `读取终端失败：${errorText(error)}`);
+      await failTerminal(host, state, `读取终端失败：${errorText(error)}`);
     }
   } finally {
     if (isCurrentTerminal(state, generation, terminalId)) {
@@ -150,12 +157,10 @@ async function poll(host, state) {
     }
   }
 }
-function terminalSize(state) {
-  return {
-    cols: Math.max(MIN_COLUMNS, Math.floor(state.controls.screen.clientWidth / CELL_WIDTH)),
-    rows: Math.max(MIN_ROWS, Math.floor(state.controls.screen.clientHeight / CELL_HEIGHT)),
-  };
-}
+function terminalSize(state) { return {
+  cols: Math.max(MIN_COLUMNS, Math.floor(state.controls.screen.clientWidth / CELL_WIDTH)),
+  rows: Math.max(MIN_ROWS, Math.floor(state.controls.screen.clientHeight / CELL_HEIGHT)),
+}; }
 async function terminalOpenOptions(host, state) {
   if (!/Windows/i.test(navigator.userAgent)) return terminalSize(state);
   const settings = await host.request("xsec.terminal.settings.get", {});
@@ -163,7 +168,7 @@ async function terminalOpenOptions(host, state) {
 }
 async function openTerminal(host, state, generation) {
   state.controls.status.textContent = "";
-  state.controls.screen.textContent = "";
+  state.controls.screenText.data = "";
   try {
     const options = await terminalOpenOptions(host, state);
     if (generation !== state.generation) return;
@@ -178,7 +183,7 @@ async function openTerminal(host, state, generation) {
     schedulePoll(host, state, 0);
   } catch (error) {
     if (generation !== state.generation) return;
-    failTerminal(state, `启动终端失败：${errorText(error)}`);
+    await failTerminal(host, state, `启动终端失败：${errorText(error)}`);
   }
 }
 function scheduleWrite(host, state) {
@@ -197,7 +202,7 @@ async function flushWrite(host, state) {
     await host.request("xsec.terminal.write", { terminalId, data });
   } catch (error) {
     if (isCurrentTerminal(state, generation, terminalId)) {
-      failTerminal(state, `写入终端失败：${errorText(error)}`);
+      await failTerminal(host, state, `写入终端失败：${errorText(error)}`);
     }
   } finally {
     if (isCurrentTerminal(state, generation, terminalId)) {
@@ -228,9 +233,9 @@ function resizeTerminal(host, state) {
   void host.request("xsec.terminal.resize", {
     terminalId,
     ...terminalSize(state),
-  }).catch((error) => {
+  }).catch(async (error) => {
     if (resizeGeneration === state.resizeGeneration && isCurrentTerminal(state, generation, terminalId)) {
-      failTerminal(state, `调整终端大小失败：${errorText(error)}`);
+      await failTerminal(host, state, `调整终端大小失败：${errorText(error)}`);
     }
   });
 }
@@ -240,10 +245,11 @@ function buildTerminal(host, state) {
   screen.tabIndex = 0;
   screen.setAttribute("role", "application");
   screen.setAttribute("aria-label", "系统终端");
+  screen.append(document.createTextNode(""));
   screen.onkeydown = (event) => keyInput(host, state, event);
   app.append(status, screen);
   state.root.append(app);
-  state.controls = { status, screen };
+  state.controls = { status, screen, screenText: screen.firstChild };
   state.observer = new ResizeObserver(() => {
     clearTimeout(state.resizeTimer);
     state.resizeTimer = setTimeout(() => resizeTerminal(host, state), RESIZE_DELAY_MS);
@@ -280,15 +286,15 @@ function terminalSurface(host) {
   };
   return {
     mount(root) {
-      state.root = root; state.generation += 1;
+      state.root = root; state.generation += 1; console.info("system-terminal.surface.mount");
       state.disposed = false; state.failed = false;
       state.theme = followHostTheme(host); buildTerminal(host, state);
     },
     update() {},
-    dispose() { return disposeTerminal(host, state); },
+    dispose() { console.debug("system-terminal.surface.dispose"); return disposeTerminal(host, state); },
   };
 }
 export function activate(host) {
-  if (host.context?.kind === "settings-page") return terminalSettings(host);
+  console.debug("system-terminal.activate", { kind: host.context?.kind }); if (host.context?.kind === "settings-page") return terminalSettings(host);
   return terminalSurface(host);
 }
