@@ -53,7 +53,7 @@ function renderSettingsView(state, view) {
   state.controls.effective.textContent = effective ? `新建终端将使用：${effective.label || effective.id}` : "";
 }
 async function loadSettings(host, state, generation = state.generation) {
-  state.ready = false; state.controls.save.disabled = true;
+  state.ready = false; state.controls.save.disabled = true; state.controls.retry.hidden = true;
   settingStatus(state, "正在读取终端设置…");
   try {
     const view = await host.request("xsec.terminal.settings.get", {});
@@ -62,7 +62,7 @@ async function loadSettings(host, state, generation = state.generation) {
     state.ready = true; state.controls.save.disabled = false;
     settingStatus(state, "");
   } catch (error) {
-    if (generation === state.generation) settingStatus(state, `读取终端设置失败：${errorText(error)}`, true);
+    if (generation === state.generation) { settingStatus(state, `读取终端设置失败：${errorText(error)}`, true); state.controls.retry.hidden = false; }
   }
 }
 async function saveSettings(host, state) {
@@ -88,17 +88,17 @@ function buildSettings(host, state) {
   const page = e("main", "settings"), card = e("section", "settings-card"), form = e("div");
   const label = e("label", "", "Windows 默认终端"), profile = e("select");
   const effective = e("p", "effective"), systemDefault = e("p"), actions = e("div", "actions");
-  const save = e("button", "primary", "保存"), notice = e("p", "notice");
+  const save = e("button", "primary", "保存"), retry = e("button", "", "重试读取设置"), notice = e("p", "notice");
   form.hidden = true; systemDefault.hidden = true;
-  save.disabled = true;
-  save.onclick = () => void saveSettings(host, state);
+  save.disabled = true; retry.hidden = true;
+  save.onclick = () => void saveSettings(host, state); retry.onclick = () => { console.info("system-terminal.settings.retry"); void loadSettings(host, state); };
   label.append(profile);
-  actions.append(save);
+  actions.append(retry, save);
   form.append(label, effective, actions);
   card.append(e("h1", "", "系统终端"), e("p", "", "设置之后新建终端使用的 Shell。"), form, systemDefault, notice);
   page.append(card);
   state.root.append(page);
-  state.controls = { form, profile, effective, systemDefault, save, notice };
+  state.controls = { form, profile, effective, systemDefault, save, retry, notice };
   void loadSettings(host, state);
 }
 function terminalSettings(host) {

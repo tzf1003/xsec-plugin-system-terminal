@@ -47,6 +47,14 @@ class FrontendContractTests(unittest.TestCase):
         opened = opened.split("function scheduleWrite", 1)[0]
         self.assertIn("resizeTerminal(host, state)", opened)
 
+    def test_settings_read_failure_offers_an_explicit_retry(self) -> None:
+        settings = self.source.split("async function loadSettings", 1)[1]
+        settings = settings.split("function terminalSettings", 1)[0]
+        self.assertIn('retry = e("button", "", "重试读取设置")', settings)
+        self.assertIn('state.controls.retry.hidden = false', settings)
+        self.assertIn('system-terminal.settings.retry', settings)
+        self.assertIn('void loadSettings(host, state)', settings)
+
     def test_polling_stops_on_read_failure_and_throttles_idle_reads(self) -> None:
         poll = self.source.split("async function poll", 1)[1]
         poll = poll.split("function terminalSize", 1)[0]
