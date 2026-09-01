@@ -51,7 +51,7 @@ class FrontendContractTests(unittest.TestCase):
         poll = self.source.split("async function poll", 1)[1]
         poll = poll.split("function terminalSize", 1)[0]
         self.assertIn("IDLE_POLL_INTERVAL_MS = 500", self.source)
-        self.assertIn("await failTerminal(host, state, `读取终端失败：", poll)
+        self.assertIn("await failTerminal(host, state, `读取终端失败\uFF1A", poll)
         self.assertNotIn("schedulePoll(host, state", poll.split("catch (error)", 1)[1].split("finally", 1)[0])
 
     def test_terminal_failure_closes_once_and_scrollback_is_bounded(self) -> None:
