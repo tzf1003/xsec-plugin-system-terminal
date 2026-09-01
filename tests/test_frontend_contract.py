@@ -23,6 +23,8 @@ class FrontendContractTests(unittest.TestCase):
             self.assertNotIn(text, surface)
 
     def test_settings_follow_host_theme_and_limit_windows_profiles(self) -> None:
+        """Keep themed Windows profiles and the Unix login-shell label aligned."""
+
         self.assertIn("host.onTheme?.(apply)", self.source)
         self.assertIn(':root[data-theme="light"]', self.source)
         self.assertIn('view?.platform === "windows"', self.source)
