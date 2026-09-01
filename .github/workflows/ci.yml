@@ -22,3 +22,9 @@ jobs:
         run: |
           node --check plugins/com.xsec.system-terminal/com.xsec.desktop/frontend/index.js
           python3 -m unittest discover -s tests -p 'test_*.py'
+
+  source-preflight:
+    needs: manifest
+    uses: tzf1003/xsec-plugins/.github/workflows/first-party-source-preflight.yml@main
+    with:
+      plugin_id: com.xsec.system-terminal
