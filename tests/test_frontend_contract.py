@@ -19,7 +19,7 @@ class FrontendContractTests(unittest.TestCase):
         surface = self.source.split("function terminalSurface(host)", 1)[1]
         self.assertIn('screen.setAttribute("aria-label", "系统终端")', self.source)
         self.assertIn("启动终端失败：", self.source)
-        for text in ("打开插件设置", "重试启动终端", "点击终端区域后直接键入命令"):
+        for text in ("打开插件设置", "重试启动终端", "重新打开终端", "点击终端区域后直接键入命令"):
             self.assertNotIn(text, surface)
 
     def test_settings_follow_host_theme_and_limit_windows_profiles(self) -> None:
@@ -32,20 +32,36 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("effective.label || effective.id", self.source)
         self.assertIn("新建终端使用当前帐户的登录 Shell。", self.source)
 
-    def test_windows_profile_is_loaded_for_each_new_terminal(self) -> None:
-        options = self.source.split("async function terminalOpenOptions", 1)[1]
-        options = options.split("async function openTerminal", 1)[0]
-        self.assertIn('/Windows/i.test(navigator.userAgent)', options)
-        self.assertIn('host.request("xsec.terminal.settings.get"', options)
-        self.assertIn("profileId: settings?.effectiveProfileId", options)
-        self.assertNotIn(".catch", options)
-        self.assertGreater(
-            options.rfind("terminalSize(state)"),
-            options.index('host.request("xsec.terminal.settings.get"'),
-        )
+    def test_terminal_open_delegates_the_saved_profile_to_the_host(self) -> None:
+        opened = self.source.split("async function openTerminal", 1)[1]
+        opened = opened.split("function scheduleWrite", 1)[0]
+        self.assertIn('host.request("xsec.terminal.open", terminalSize(state))', opened)
+        self.assertNotIn('host.request("xsec.terminal.settings.get"', opened)
+        self.assertNotIn("profileId", opened)
+        self.assertNotIn("navigator.userAgent", opened)
         opened = self.source.split("state.terminalId = handle.terminal_id", 1)[1]
         opened = opened.split("function scheduleWrite", 1)[0]
         self.assertIn("resizeTerminal(host, state)", opened)
+
+    def test_terminal_size_uses_the_visible_content_box(self) -> None:
+        size = self.source.split("function terminalSize", 1)[1]
+        size = size.split("async function openTerminal", 1)[0]
+        self.assertIn("getComputedStyle(screen)", size)
+        for edge in ("paddingLeft", "paddingRight", "paddingTop", "paddingBottom"):
+            self.assertIn(edge, size)
+
+    def test_settings_read_failure_offers_an_explicit_retry(self) -> None:
+        settings = self.source.split("async function loadSettings", 1)[1]
+        settings = settings.split("function terminalSettings", 1)[0]
+        self.assertIn('retry = e("button", "", "重试读取设置")', settings)
+        self.assertIn('state.controls.retry.hidden = false', settings)
+        self.assertIn('system-terminal.settings.retry', settings)
+        self.assertIn('void loadSettings(host, state)', settings)
+        self.assertIn('actions.append(save); retryActions.append(retry)', settings)
+        self.assertIn('form, systemDefault, retryActions, notice', settings)
+        failure = settings.split("catch (error)", 1)[1]
+        self.assertNotIn("renderSettingsView", failure)
+        self.assertNotIn("state.ready = true", failure)
 
     def test_polling_stops_on_read_failure_and_throttles_idle_reads(self) -> None:
         poll = self.source.split("async function poll", 1)[1]
