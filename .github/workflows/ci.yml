@@ -25,6 +25,6 @@ jobs:
 
   source-preflight:
     needs: manifest
-    uses: tzf1003/xsec-plugins/.github/workflows/first-party-source-preflight.yml@main
+    uses: tzf1003/xsec-plugins/.github/workflows/first-party-source-preflight.yml@bb9898f61bdea92f594dfe0753f632b9fc36b6ca
     with:
       plugin_id: com.xsec.system-terminal
